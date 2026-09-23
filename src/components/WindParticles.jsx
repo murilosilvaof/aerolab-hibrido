@@ -1,46 +1,103 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
-import { AdditiveBlending, MathUtils } from 'three'
+import { DoubleSide, MathUtils } from 'three'
 
-const PARTICLE_COUNT = 2600
-const TUNNEL_HALF_LENGTH = 6.7
-const TUNNEL_LIMIT_Y = 1.82
-const TUNNEL_LIMIT_Z = 1.58
-const SURFACE_CLEARANCE = 0.055
+const RIBBON_ROWS = 9
+const RIBBON_LAYERS = 5
+const RIBBON_COUNT = RIBBON_ROWS * RIBBON_LAYERS
+const SAMPLES_PER_RIBBON = 96
+const SEGMENTS_PER_RIBBON = SAMPLES_PER_RIBBON - 1
+const VERTICES_PER_SEGMENT = 6
+const VERTEX_COUNT =
+  RIBBON_COUNT * SEGMENTS_PER_RIBBON * VERTICES_PER_SEGMENT
+const TUNNEL_HALF_LENGTH = 6.8
+const TUNNEL_LENGTH = TUNNEL_HALF_LENGTH * 2
+const SURFACE_CLEARANCE = 0.06
 const NORMAL_EPSILON = 0.018
 
 const SMOKE_VERTEX_SHADER = `
-  attribute float aAlpha;
-  attribute float aSize;
-  varying float vAlpha;
+  attribute vec3 aColor;
+  attribute float aOpacity;
+  attribute float aSeed;
+  attribute float aFlowSpeed;
+
+  varying vec2 vUv;
   varying vec3 vColor;
+  varying float vOpacity;
+  varying float vSeed;
+  varying float vFlowSpeed;
 
   void main() {
-    vAlpha = aAlpha;
-    vColor = color;
+    vUv = uv;
+    vColor = aColor;
+    vOpacity = aOpacity;
+    vSeed = aSeed;
+    vFlowSpeed = aFlowSpeed;
 
-    vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-    gl_PointSize = aSize * (280.0 / -mvPosition.z);
-    gl_Position = projectionMatrix * mvPosition;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
   }
 `
 
 const SMOKE_FRAGMENT_SHADER = `
-  varying float vAlpha;
+  uniform float uTime;
+
+  varying vec2 vUv;
   varying vec3 vColor;
+  varying float vOpacity;
+  varying float vSeed;
+  varying float vFlowSpeed;
+
+  float hash(vec2 point) {
+    return fract(sin(dot(point, vec2(127.1, 311.7))) * 43758.5453123);
+  }
+
+  float noise(vec2 point) {
+    vec2 cell = floor(point);
+    vec2 local = fract(point);
+    vec2 curve = local * local * (3.0 - 2.0 * local);
+
+    float a = hash(cell);
+    float b = hash(cell + vec2(1.0, 0.0));
+    float c = hash(cell + vec2(0.0, 1.0));
+    float d = hash(cell + vec2(1.0, 1.0));
+
+    return mix(mix(a, b, curve.x), mix(c, d, curve.x), curve.y);
+  }
+
+  float fbm(vec2 point) {
+    float value = 0.0;
+    float amplitude = 0.52;
+
+    for (int i = 0; i < 4; i++) {
+      value += noise(point) * amplitude;
+      point *= 2.05;
+      amplitude *= 0.5;
+    }
+
+    return value;
+  }
 
   void main() {
-    vec2 uv = gl_PointCoord - vec2(0.5);
-    float distanceFromCenter = length(uv);
-    float softDisc = smoothstep(0.5, 0.08, distanceFromCenter);
-    float denseCore = smoothstep(0.22, 0.0, distanceFromCenter);
-    float smokeAlpha = softDisc * (0.55 + denseCore * 0.45);
+    float edgeDistance = abs(vUv.y - 0.5);
+    float softEdge = 1.0 - smoothstep(0.24, 0.5, edgeDistance);
+    float endFade =
+      smoothstep(0.0, 0.08, vUv.x) *
+      (1.0 - smoothstep(0.91, 1.0, vUv.x));
 
-    if (smokeAlpha < 0.015) {
+    float flow = vUv.x * 8.2 - uTime * vFlowSpeed + vSeed * 12.7;
+    float broadSmoke = fbm(vec2(flow, vUv.y * 2.6 + vSeed));
+    float fineSmoke = fbm(vec2(flow * 2.8, vUv.y * 7.0 + vSeed * 4.0));
+    float vapor = smoothstep(0.16, 0.82, broadSmoke * 0.72 + fineSmoke * 0.28);
+    float body = 0.24 + vapor * 0.76;
+    float alpha = softEdge * endFade * body * vOpacity;
+
+    if (alpha < 0.012) {
       discard;
     }
 
-    gl_FragColor = vec4(vColor, vAlpha * smokeAlpha);
+    vec3 litSmoke = mix(vColor * 0.74, vec3(0.82, 0.97, 1.0), vapor * 0.34);
+
+    gl_FragColor = vec4(litSmoke, alpha);
   }
 `
 
@@ -50,40 +107,40 @@ const FLOW_PROFILES = {
     halfX: 0.78,
     halfY: 0.78,
     halfZ: 0.78,
-    influence: 1.08,
-    speed: 1.68,
-    split: 1.38,
-    deflection: 1.25,
-    sideAcceleration: 0.42,
+    influence: 1.1,
+    speed: 1.7,
+    split: 1.34,
+    deflection: 1.28,
+    sideAcceleration: 0.44,
     wakeStart: 0.72,
-    wakeLength: 4.8,
-    wakeRadiusY: 1.04,
-    wakeRadiusZ: 1.04,
-    wakeDrag: 0.72,
-    recirculation: 0.18,
-    vortex: 0.54,
-    shedding: 7.4,
-    wakeExpansion: 0.78,
+    wakeLength: 4.7,
+    wakeRadiusY: 1.02,
+    wakeRadiusZ: 1.02,
+    wakeDrag: 0.68,
+    recirculation: 0.16,
+    vortex: 0.48,
+    shedding: 7.2,
+    wakeExpansion: 0.74,
   },
   sphere: {
     kind: 'sphere',
     radius: 0.96,
     halfX: 0.96,
-    influence: 1.32,
-    speed: 1.78,
-    split: 0.72,
-    deflection: 0.78,
-    sideAcceleration: 0.25,
+    influence: 1.34,
+    speed: 1.8,
+    split: 0.7,
+    deflection: 0.76,
+    sideAcceleration: 0.24,
     wakeStart: 0.82,
     wakeLength: 3.6,
-    wakeRadiusY: 0.86,
-    wakeRadiusZ: 0.86,
-    wakeDrag: 0.38,
-    recirculation: 0.05,
-    vortex: 0.2,
+    wakeRadiusY: 0.88,
+    wakeRadiusZ: 0.88,
+    wakeDrag: 0.36,
+    recirculation: 0.04,
+    vortex: 0.18,
     shedding: 5.4,
-    wakeExpansion: 0.42,
-    potentialRange: 2.5,
+    wakeExpansion: 0.38,
+    potentialRange: 2.55,
   },
   wing: {
     kind: 'wing',
@@ -91,10 +148,10 @@ const FLOW_PROFILES = {
     halfY: 0.18,
     halfZ: 0.62,
     influence: 0.78,
-    speed: 1.92,
-    split: 0.22,
-    deflection: 0.7,
-    sideAcceleration: 0.48,
+    speed: 1.94,
+    split: 0.2,
+    deflection: 0.68,
+    sideAcceleration: 0.5,
     camber: 0.08,
     angle: 0.12,
     upwash: 0.2,
@@ -103,17 +160,17 @@ const FLOW_PROFILES = {
     wakeLength: 3.25,
     wakeRadiusY: 0.58,
     wakeRadiusZ: 0.9,
-    wakeDrag: 0.22,
+    wakeDrag: 0.2,
     recirculation: 0.01,
     vortex: 0.08,
     shedding: 6,
-    wakeExpansion: 0.28,
+    wakeExpansion: 0.26,
   },
   car: {
     kind: 'car',
     halfX: 1.22,
-    influence: 1,
-    speed: 1.7,
+    influence: 1.02,
+    speed: 1.72,
     split: 0.98,
     deflection: 1.08,
     sideAcceleration: 0.34,
@@ -123,7 +180,7 @@ const FLOW_PROFILES = {
     wakeRadiusZ: 0.92,
     wakeDrag: 0.56,
     recirculation: 0.1,
-    vortex: 0.34,
+    vortex: 0.32,
     shedding: 6.6,
     wakeExpansion: 0.62,
   },
@@ -233,8 +290,23 @@ function sampleNormal(x, y, z, profile) {
   }
 }
 
-function applyPotentialSphereVelocity(particle, profile, velocity) {
-  const r = Math.hypot(particle.x, particle.y, particle.z)
+function projectOutsideObstacle(point, profile) {
+  const sdf = sdfAt(point.x, point.y, point.z, profile)
+
+  if (sdf >= SURFACE_CLEARANCE) {
+    return
+  }
+
+  const normal = sampleNormal(point.x, point.y, point.z, profile)
+  const correction = SURFACE_CLEARANCE - sdf
+
+  point.x += normal.x * correction
+  point.y += normal.y * correction
+  point.z += normal.z * correction
+}
+
+function applyPotentialSphereVelocity(point, profile, velocity) {
+  const r = Math.hypot(point.x, point.y, point.z)
 
   if (r <= profile.radius * 1.04 || r >= profile.potentialRange) {
     return
@@ -247,28 +319,26 @@ function applyPotentialSphereVelocity(particle, profile, velocity) {
   const blend = 1 - smoothstep(profile.radius * 1.1, profile.potentialRange, r)
   const potentialX =
     velocity.x *
-    (1 +
-      coefficient -
-      (3 * radius3 * particle.x * particle.x) / (2 * r5))
+    (1 + coefficient - (3 * radius3 * point.x * point.x) / (2 * r5))
   const potentialY =
-    velocity.x * (-(3 * radius3 * particle.x * particle.y) / (2 * r5))
+    velocity.x * (-(3 * radius3 * point.x * point.y) / (2 * r5))
   const potentialZ =
-    velocity.x * (-(3 * radius3 * particle.x * particle.z) / (2 * r5))
+    velocity.x * (-(3 * radius3 * point.x * point.z) / (2 * r5))
 
   velocity.x = MathUtils.lerp(velocity.x, potentialX, blend)
   velocity.y = MathUtils.lerp(velocity.y, potentialY, blend)
   velocity.z = MathUtils.lerp(velocity.z, potentialZ, blend)
 }
 
-function applyObstacleDeflection(particle, profile, velocity) {
-  const sdf = sdfAt(particle.x, particle.y, particle.z, profile)
+function applyObstacleDeflection(point, profile, velocity) {
+  const sdf = sdfAt(point.x, point.y, point.z, profile)
   const influence = 1 - smoothstep(0.02, profile.influence, Math.max(sdf, 0))
 
   if (influence <= 0) {
     return
   }
 
-  const normal = sampleNormal(particle.x, particle.y, particle.z, profile)
+  const normal = sampleNormal(point.x, point.y, point.z, profile)
   const incoming =
     velocity.x * normal.x + velocity.y * normal.y + velocity.z * normal.z
 
@@ -282,45 +352,45 @@ function applyObstacleDeflection(particle, profile, velocity) {
     (1 -
       smoothstep(
         -profile.halfX - profile.influence * 1.35,
-        -profile.halfX * 0.14,
-        particle.x,
+        -profile.halfX * 0.12,
+        point.x,
       )) *
     influence
-  const coreDistance = Math.hypot(particle.y * 1.15, particle.z)
-  const splitter = front * (1 - smoothstep(0.05, 0.72, coreDistance))
+  const coreDistance = Math.hypot(point.y * 1.15, point.z)
+  const splitter = front * (1 - smoothstep(0.05, 0.74, coreDistance))
 
-  velocity.y += particle.splitY * profile.split * splitter
-  velocity.z += particle.splitZ * profile.split * splitter
+  velocity.y += point.splitY * profile.split * splitter
+  velocity.z += point.splitZ * profile.split * splitter
 
-  const surfaceSlip = influence * (1 - Math.abs(normal.x)) ** 0.75
+  const surfaceSlip = influence * (1 - Math.abs(normal.x)) ** 0.76
   velocity.x += velocity.baseSpeed * profile.sideAcceleration * surfaceSlip
 }
 
-function applyWingDownwash(particle, profile, velocity) {
+function applyWingDownwash(point, profile, velocity) {
   if (profile.kind !== 'wing') {
     return
   }
 
   const crossSection =
-    (1 - smoothstep(0.2, 1.55, Math.abs(particle.y))) *
-    (1 - smoothstep(0.45, 1.35, Math.abs(particle.z)))
+    (1 - smoothstep(0.2, 1.55, Math.abs(point.y))) *
+    (1 - smoothstep(0.45, 1.35, Math.abs(point.z)))
   const upwash =
-    smoothstep(-3.1, -profile.halfX, particle.x) *
-    (1 - smoothstep(-profile.halfX, -0.15, particle.x))
+    smoothstep(-3.1, -profile.halfX, point.x) *
+    (1 - smoothstep(-profile.halfX, -0.15, point.x))
   const downwash =
-    smoothstep(-0.2, profile.halfX, particle.x) *
-    (1 - smoothstep(profile.halfX, profile.halfX + 3, particle.x))
+    smoothstep(-0.2, profile.halfX, point.x) *
+    (1 - smoothstep(profile.halfX, profile.halfX + 3, point.x))
 
   velocity.y += profile.upwash * upwash * crossSection
   velocity.y -= profile.downwash * downwash * crossSection
 }
 
-function applyWake(particle, profile, elapsed, velocity) {
-  if (particle.x <= profile.wakeStart) {
+function applyWake(point, profile, elapsed, velocity) {
+  if (point.x <= profile.wakeStart) {
     return
   }
 
-  const progress = (particle.x - profile.wakeStart) / profile.wakeLength
+  const progress = (point.x - profile.wakeStart) / profile.wakeLength
 
   if (progress <= 0 || progress >= 1) {
     return
@@ -334,16 +404,12 @@ function applyWake(particle, profile, elapsed, velocity) {
         : 0
   const radiusY = profile.wakeRadiusY + progress * profile.wakeExpansion
   const radiusZ = profile.wakeRadiusZ + progress * profile.wakeExpansion
-  const radial = Math.hypot(
-    (particle.y - wakeCenterY) / radiusY,
-    particle.z / radiusZ,
-  )
+  const radial = Math.hypot((point.y - wakeCenterY) / radiusY, point.z / radiusZ)
   const core = Math.exp(-radial * radial * 1.45)
   const fade = (1 - progress) ** 0.82
   const wake = core * fade
-  const rollup = smoothstep(0.05, 0.34, progress)
-  const phase =
-    elapsed * profile.shedding - particle.x * 2.85 + particle.phase * 1.7
+  const rollup = smoothstep(0.06, 0.34, progress)
+  const phase = elapsed * profile.shedding - point.x * 2.75 + point.phase * 1.5
 
   velocity.x *= 1 - profile.wakeDrag * wake
   velocity.x -=
@@ -356,8 +422,8 @@ function applyWake(particle, profile, elapsed, velocity) {
   velocity.z += Math.cos(phase * 0.92) * profile.vortex * wake * rollup * 0.62
 }
 
-function sampleVelocity(particle, profile, elapsed) {
-  const baseSpeed = profile.speed * particle.speedJitter
+function sampleVelocity(point, profile, elapsed) {
+  const baseSpeed = profile.speed * point.speedJitter
   const velocity = {
     x: baseSpeed,
     y: 0,
@@ -366,252 +432,241 @@ function sampleVelocity(particle, profile, elapsed) {
   }
 
   if (profile.kind === 'sphere') {
-    applyPotentialSphereVelocity(particle, profile, velocity)
+    applyPotentialSphereVelocity(point, profile, velocity)
   }
 
-  applyObstacleDeflection(particle, profile, velocity)
-  applyWingDownwash(particle, profile, velocity)
-  applyWake(particle, profile, elapsed, velocity)
+  applyObstacleDeflection(point, profile, velocity)
+  applyWingDownwash(point, profile, velocity)
+  applyWake(point, profile, elapsed, velocity)
 
   return velocity
 }
 
-function spawnParticle(particle, index, profile, entryOnly = false) {
-  const laneIndex = index % 169
-  const row = laneIndex % 13
-  const layer = Math.floor(laneIndex / 13)
-  const rowJitter = (hashFloat(index * 2.7 + particle.seed) - 0.5) * 0.08
-  const layerJitter = (hashFloat(index * 3.1 + particle.seed) - 0.5) * 0.08
-  const centralSmoke = index % 3 !== 0
-  const laneScale = centralSmoke ? 0.22 : 0.255
-  const y = (row - 6) * laneScale + rowJitter
-  const z = (layer - 6) * laneScale + layerJitter
-  const radial = Math.hypot(y * 1.15, z)
-  const phase = particle.seed * Math.PI * 2 + index * 0.37
+function createRibbons() {
+  return Array.from({ length: RIBBON_COUNT }, (_, index) => {
+    const row = index % RIBBON_ROWS
+    const layer = Math.floor(index / RIBBON_ROWS)
+    const baseY = (row - (RIBBON_ROWS - 1) / 2) * 0.31
+    const baseZ = (layer - (RIBBON_LAYERS - 1) / 2) * 0.38
+    const radial = Math.hypot(baseY * 1.15, baseZ)
+    const seed = hashFloat(index + 0.73)
+    const phase = seed * Math.PI * 2 + index * 0.41
+    const splitY = radial < 0.04 ? Math.sin(phase) : (baseY * 1.15) / radial
+    const splitZ = radial < 0.04 ? Math.cos(phase) : baseZ / radial
+    const widthAngle = seed * Math.PI * 2
 
-  particle.x = entryOnly
-    ? -TUNNEL_HALF_LENGTH - hashFloat(index + particle.seed) * 0.4
-    : -TUNNEL_HALF_LENGTH + hashFloat(index + particle.seed) * TUNNEL_HALF_LENGTH * 2
-  particle.y = y
-  particle.z = z
-  particle.splitY = radial < 0.04 ? Math.sin(phase) : (y * 1.15) / radial
-  particle.splitZ = radial < 0.04 ? Math.cos(phase) : z / radial
-  particle.phase = phase
-  particle.baseSize =
-    (centralSmoke ? 0.15 : 0.1) * (0.78 + hashFloat(index + 9.8) * 0.5)
-  particle.alpha = 0
-  particle.age = entryOnly ? 0 : hashFloat(index + 17.4) * 3
-
-  if (profile) {
-    projectOutsideObstacle(particle, profile)
-  }
+    return {
+      baseY,
+      baseZ,
+      splitY,
+      splitZ,
+      seed,
+      phase,
+      speedJitter: 0.93 + hashFloat(index + 7.2) * 0.16,
+      width: 0.13 + hashFloat(index + 4.8) * 0.07,
+      widthAngle,
+      opacity: 0.2 + hashFloat(index + 12.3) * 0.1,
+      flowSpeed: 0.68 + hashFloat(index + 18.1) * 0.2,
+    }
+  })
 }
 
-function createParticles() {
-  return Array.from({ length: PARTICLE_COUNT }, (_, index) => ({
-    x: 0,
-    y: 0,
-    z: 0,
-    splitY: 0,
-    splitZ: 0,
-    phase: 0,
-    seed: hashFloat(index + 0.37),
-    speedJitter: 0.9 + hashFloat(index + 8.4) * 0.2,
-    baseSize: 0.1,
-    alpha: 0,
-    age: 0,
-  }))
-}
-
-function projectOutsideObstacle(particle, profile) {
-  const sdf = sdfAt(particle.x, particle.y, particle.z, profile)
-
-  if (sdf >= SURFACE_CLEARANCE) {
-    return
-  }
-
-  const normal = sampleNormal(particle.x, particle.y, particle.z, profile)
-  const correction = SURFACE_CLEARANCE - sdf
-
-  particle.x += normal.x * correction
-  particle.y += normal.y * correction
-  particle.z += normal.z * correction
-}
-
-function particleDensity(particle, profile) {
-  const sdf = sdfAt(particle.x, particle.y, particle.z, profile)
-  const nearSurface = 1 - smoothstep(0.02, 0.62, Math.max(sdf, 0))
-  const inletFade = smoothstep(-TUNNEL_HALF_LENGTH, -TUNNEL_HALF_LENGTH + 1, particle.x)
-  const outletFade =
-    1 - smoothstep(TUNNEL_HALF_LENGTH - 1.2, TUNNEL_HALF_LENGTH, particle.x)
-  const wakeProgress = (particle.x - profile.wakeStart) / profile.wakeLength
-  const wakeAmount =
-    wakeProgress > 0 && wakeProgress < 1
-      ? Math.exp(
-          -(
-            (particle.y / (profile.wakeRadiusY + wakeProgress * profile.wakeExpansion)) **
-              2 +
-            (particle.z / (profile.wakeRadiusZ + wakeProgress * profile.wakeExpansion)) **
-              2
-          ) *
-            1.1,
-        ) *
-        (1 - wakeProgress) *
-        0.38
-      : 0
-
-  return MathUtils.clamp(
-    0.12 + nearSurface * 0.2 + wakeAmount + inletFade * outletFade * 0.56,
+function writeVertex(simulation, vertexIndex, point, side, ribbon, profile) {
+  const positionCursor = vertexIndex * 3
+  const uvCursor = vertexIndex * 2
+  const edgeOffset = side === 0 ? -1 : 1
+  const wakeProgress = MathUtils.clamp(
+    (point.x - profile.wakeStart) / profile.wakeLength,
     0,
-    0.86,
+    1,
   )
-}
-
-function stepParticle(particle, index, profile, elapsed, delta) {
-  const substeps = 3
-  const stepDelta = Math.min(delta / substeps, 0.018)
-
-  for (let step = 0; step < substeps; step += 1) {
-    const velocity = sampleVelocity(particle, profile, elapsed)
-    const microTurbulence =
-      0.016 +
-      Math.max(0, particle.x - profile.wakeStart) * 0.004 * profile.vortex
-
-    particle.x += velocity.x * stepDelta
-    particle.y +=
-      (velocity.y +
-        Math.sin(elapsed * 1.8 + particle.phase) * microTurbulence) *
-      stepDelta
-    particle.z +=
-      (velocity.z +
-        Math.cos(elapsed * 1.6 + particle.phase * 1.3) * microTurbulence) *
-      stepDelta
-    projectOutsideObstacle(particle, profile)
-  }
-
-  particle.age += delta
-
-  if (
-    particle.x > TUNNEL_HALF_LENGTH ||
-    Math.abs(particle.y) > TUNNEL_LIMIT_Y ||
-    Math.abs(particle.z) > TUNNEL_LIMIT_Z
-  ) {
-    spawnParticle(particle, index, profile, true)
-  }
-}
-
-function writeBuffers(simulation, profile) {
-  const { particles, positions, colors, alphas, sizes } = simulation
-
-  particles.forEach((particle, index) => {
-    const positionCursor = index * 3
-    const density = particleDensity(particle, profile)
-    const wakeTint = smoothstep(
-      profile.wakeStart,
-      profile.wakeStart + profile.wakeLength * 0.45,
-      particle.x,
+  const surfaceTint =
+    1 -
+    smoothstep(
+      0.02,
+      0.58,
+      Math.max(sdfAt(point.x, point.y, point.z, profile), 0),
     )
-    const surfaceTint =
-      1 - smoothstep(0.02, 0.5, Math.max(sdfAt(particle.x, particle.y, particle.z, profile), 0))
+  const wakeTint = wakeProgress > 0 ? (1 - wakeProgress) * 0.28 : 0
+  const width =
+    ribbon.width *
+    (1 + surfaceTint * 0.42 + wakeTint * 1.5) *
+    (0.92 + Math.sin(point.phase + point.x * 0.8) * 0.05)
+  const angle =
+    ribbon.widthAngle +
+    Math.sin(point.x * 0.45 + ribbon.phase) * 0.16 +
+    wakeProgress * Math.sin(point.phase) * 0.35
+  const offsetY = Math.cos(angle) * width * edgeOffset
+  const offsetZ = Math.sin(angle) * width * edgeOffset
 
-    positions[positionCursor] = particle.x
-    positions[positionCursor + 1] = particle.y
-    positions[positionCursor + 2] = particle.z
+  simulation.positions[positionCursor] = point.x
+  simulation.positions[positionCursor + 1] = point.y + offsetY
+  simulation.positions[positionCursor + 2] = point.z + offsetZ
 
-    colors[positionCursor] = 0.48 + surfaceTint * 0.18 + wakeTint * 0.06
-    colors[positionCursor + 1] = 0.8 + surfaceTint * 0.14
-    colors[positionCursor + 2] = 0.95 + surfaceTint * 0.05
+  simulation.colors[positionCursor] = 0.45 + surfaceTint * 0.16 + wakeTint * 0.1
+  simulation.colors[positionCursor + 1] = 0.76 + surfaceTint * 0.15
+  simulation.colors[positionCursor + 2] = 0.9 + surfaceTint * 0.08
 
-    alphas[index] = density * Math.min(1, particle.age * 1.8)
-    sizes[index] =
-      particle.baseSize *
-      (1 + surfaceTint * 0.35 + wakeTint * 0.55) *
-      (0.88 + Math.sin(particle.phase + particle.age * 2) * 0.08)
-  })
+  simulation.opacities[vertexIndex] =
+    ribbon.opacity * (1 + surfaceTint * 0.38 + wakeTint * 0.95)
+  simulation.seeds[vertexIndex] = ribbon.seed
+  simulation.flowSpeeds[vertexIndex] = ribbon.flowSpeed
+
+  if (!simulation.staticAttributesReady) {
+    simulation.uvs[uvCursor] = point.u
+    simulation.uvs[uvCursor + 1] = side
+  }
 }
 
-function createSimulation(profile) {
-  const particles = createParticles()
-  const positions = new Float32Array(PARTICLE_COUNT * 3)
-  const colors = new Float32Array(PARTICLE_COUNT * 3)
-  const alphas = new Float32Array(PARTICLE_COUNT)
-  const sizes = new Float32Array(PARTICLE_COUNT)
+function advancePoint(point, profile, elapsed, dx) {
+  const velocity = sampleVelocity(point, profile, elapsed)
+  const safeXVelocity = Math.max(0.34, velocity.x)
+  const timeStep = dx / safeXVelocity
+  const wakeTurbulence =
+    Math.max(0, point.x - profile.wakeStart) * 0.005 * profile.vortex
 
-  particles.forEach((particle, index) => {
-    spawnParticle(particle, index, profile)
+  point.x += dx
+  point.y +=
+    velocity.y * timeStep +
+    Math.sin(elapsed * 1.7 + point.phase + point.x * 0.45) * wakeTurbulence
+  point.z +=
+    velocity.z * timeStep +
+    Math.cos(elapsed * 1.5 + point.phase * 1.2 + point.x * 0.4) *
+      wakeTurbulence
+
+  projectOutsideObstacle(point, profile)
+}
+
+function writeSmokeGeometry(simulation, profile, elapsed) {
+  const dx = TUNNEL_LENGTH / (SAMPLES_PER_RIBBON - 1)
+  let vertexIndex = 0
+
+  simulation.ribbons.forEach((ribbon) => {
+    const point = {
+      x: -TUNNEL_HALF_LENGTH,
+      y: ribbon.baseY,
+      z: ribbon.baseZ,
+      splitY: ribbon.splitY,
+      splitZ: ribbon.splitZ,
+      phase: ribbon.phase,
+      speedJitter: ribbon.speedJitter,
+      u: 0,
+    }
+    const previous = { ...point }
+
+    projectOutsideObstacle(previous, profile)
+
+    for (let sampleIndex = 0; sampleIndex < SEGMENTS_PER_RIBBON; sampleIndex += 1) {
+      point.x = previous.x
+      point.y = previous.y
+      point.z = previous.z
+      point.u = sampleIndex / (SAMPLES_PER_RIBBON - 1)
+
+      const next = { ...point }
+      advancePoint(next, profile, elapsed + ribbon.seed * 1.7, dx)
+      next.u = (sampleIndex + 1) / (SAMPLES_PER_RIBBON - 1)
+
+      writeVertex(simulation, vertexIndex, point, 0, ribbon, profile)
+      vertexIndex += 1
+      writeVertex(simulation, vertexIndex, next, 0, ribbon, profile)
+      vertexIndex += 1
+      writeVertex(simulation, vertexIndex, next, 1, ribbon, profile)
+      vertexIndex += 1
+      writeVertex(simulation, vertexIndex, point, 0, ribbon, profile)
+      vertexIndex += 1
+      writeVertex(simulation, vertexIndex, next, 1, ribbon, profile)
+      vertexIndex += 1
+      writeVertex(simulation, vertexIndex, point, 1, ribbon, profile)
+      vertexIndex += 1
+
+      previous.x = next.x
+      previous.y = next.y
+      previous.z = next.z
+      previous.u = next.u
+    }
   })
 
-  const simulation = { particles, positions, colors, alphas, sizes }
+  simulation.staticAttributesReady = true
+}
 
-  writeBuffers(simulation, profile)
+function createSimulation() {
+  const simulation = {
+    ribbons: createRibbons(),
+    positions: new Float32Array(VERTEX_COUNT * 3),
+    uvs: new Float32Array(VERTEX_COUNT * 2),
+    colors: new Float32Array(VERTEX_COUNT * 3),
+    opacities: new Float32Array(VERTEX_COUNT),
+    seeds: new Float32Array(VERTEX_COUNT),
+    flowSpeeds: new Float32Array(VERTEX_COUNT),
+    staticAttributesReady: false,
+  }
+
+  writeSmokeGeometry(simulation, FLOW_PROFILES.cube, 0)
 
   return simulation
 }
 
 function WindParticles({ selectedObjectId }) {
   const geometryRef = useRef(null)
-  const simulation = useMemo(() => createSimulation(FLOW_PROFILES.cube), [])
+  const materialRef = useRef(null)
+  const simulation = useMemo(() => createSimulation(), [])
 
-  useEffect(() => {
-    const profile = FLOW_PROFILES[selectedObjectId] ?? FLOW_PROFILES.cube
-
-    simulation.particles.forEach((particle, index) => {
-      spawnParticle(particle, index, profile, index % 2 === 0)
-    })
-    writeBuffers(simulation, profile)
-
-    if (geometryRef.current) {
-      geometryRef.current.attributes.position.needsUpdate = true
-      geometryRef.current.attributes.color.needsUpdate = true
-      geometryRef.current.attributes.aAlpha.needsUpdate = true
-      geometryRef.current.attributes.aSize.needsUpdate = true
-    }
-  }, [selectedObjectId, simulation])
-
-  useFrame(({ clock }, delta) => {
+  useFrame(({ clock }) => {
     const geometry = geometryRef.current
+    const material = materialRef.current
 
-    if (!geometry) {
+    if (!geometry || !material) {
       return
     }
 
     const elapsed = clock.getElapsedTime()
     const profile = FLOW_PROFILES[selectedObjectId] ?? FLOW_PROFILES.cube
 
-    simulation.particles.forEach((particle, index) => {
-      stepParticle(particle, index, profile, elapsed, delta)
-    })
-    writeBuffers(simulation, profile)
+    writeSmokeGeometry(simulation, profile, elapsed)
+    material.uniforms.uTime.value = elapsed
 
     geometry.attributes.position.needsUpdate = true
-    geometry.attributes.color.needsUpdate = true
-    geometry.attributes.aAlpha.needsUpdate = true
-    geometry.attributes.aSize.needsUpdate = true
+    geometry.attributes.aColor.needsUpdate = true
+    geometry.attributes.aOpacity.needsUpdate = true
+    geometry.attributes.aSeed.needsUpdate = true
+    geometry.attributes.aFlowSpeed.needsUpdate = true
   })
 
   return (
-    <points frustumCulled={false} renderOrder={2}>
+    <mesh frustumCulled={false} renderOrder={2}>
       <bufferGeometry ref={geometryRef}>
         <bufferAttribute
           attach="attributes-position"
           args={[simulation.positions, 3]}
         />
-        <bufferAttribute attach="attributes-color" args={[simulation.colors, 3]} />
+        <bufferAttribute attach="attributes-uv" args={[simulation.uvs, 2]} />
         <bufferAttribute
-          attach="attributes-aAlpha"
-          args={[simulation.alphas, 1]}
+          attach="attributes-aColor"
+          args={[simulation.colors, 3]}
         />
-        <bufferAttribute attach="attributes-aSize" args={[simulation.sizes, 1]} />
+        <bufferAttribute
+          attach="attributes-aOpacity"
+          args={[simulation.opacities, 1]}
+        />
+        <bufferAttribute
+          attach="attributes-aSeed"
+          args={[simulation.seeds, 1]}
+        />
+        <bufferAttribute
+          attach="attributes-aFlowSpeed"
+          args={[simulation.flowSpeeds, 1]}
+        />
       </bufferGeometry>
       <shaderMaterial
-        blending={AdditiveBlending}
+        ref={materialRef}
         depthWrite={false}
         fragmentShader={SMOKE_FRAGMENT_SHADER}
+        side={DoubleSide}
         transparent
-        vertexColors
+        uniforms={{ uTime: { value: 0 } }}
         vertexShader={SMOKE_VERTEX_SHADER}
       />
-    </points>
+    </mesh>
   )
 }
 
