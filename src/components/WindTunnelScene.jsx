@@ -54,7 +54,6 @@ function AerodynamicObject({ selectedObject }) {
     }
 
     group.scale.setScalar(MathUtils.lerp(group.scale.x, 1, delta * 5))
-    group.rotation.y += delta * 0.2
   })
 
   return (
@@ -105,7 +104,7 @@ function ObjectGeometry({ type, color }) {
 
   if (type === 'car') {
     return (
-      <group rotation={[0, Math.PI / 2, 0]}>
+      <group>
         <mesh position={[0, 0.15, 0]} castShadow receiveShadow>
           <boxGeometry args={[2.35, 0.48, 1.05]} />
           <meshStandardMaterial
