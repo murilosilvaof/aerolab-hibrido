@@ -1,6 +1,6 @@
 import { useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
-import { DoubleSide, MathUtils } from 'three'
+import { AdditiveBlending, DoubleSide, MathUtils } from 'three'
 
 const RIBBON_ROWS = 9
 const RIBBON_LAYERS = 5
@@ -15,7 +15,7 @@ const TUNNEL_LENGTH = TUNNEL_HALF_LENGTH * 2
 const SURFACE_CLEARANCE = 0.06
 const NORMAL_EPSILON = 0.018
 
-const SMOKE_VERTEX_SHADER = `
+const FLOW_VERTEX_SHADER = `
   attribute vec3 aColor;
   attribute float aOpacity;
   attribute float aSeed;
@@ -38,7 +38,7 @@ const SMOKE_VERTEX_SHADER = `
   }
 `
 
-const SMOKE_FRAGMENT_SHADER = `
+const FLOW_FRAGMENT_SHADER = `
   uniform float uTime;
 
   varying vec2 vUv;
@@ -47,57 +47,35 @@ const SMOKE_FRAGMENT_SHADER = `
   varying float vSeed;
   varying float vFlowSpeed;
 
-  float hash(vec2 point) {
-    return fract(sin(dot(point, vec2(127.1, 311.7))) * 43758.5453123);
-  }
-
-  float noise(vec2 point) {
-    vec2 cell = floor(point);
-    vec2 local = fract(point);
-    vec2 curve = local * local * (3.0 - 2.0 * local);
-
-    float a = hash(cell);
-    float b = hash(cell + vec2(1.0, 0.0));
-    float c = hash(cell + vec2(0.0, 1.0));
-    float d = hash(cell + vec2(1.0, 1.0));
-
-    return mix(mix(a, b, curve.x), mix(c, d, curve.x), curve.y);
-  }
-
-  float fbm(vec2 point) {
-    float value = 0.0;
-    float amplitude = 0.52;
-
-    for (int i = 0; i < 4; i++) {
-      value += noise(point) * amplitude;
-      point *= 2.05;
-      amplitude *= 0.5;
-    }
-
-    return value;
-  }
-
   void main() {
     float edgeDistance = abs(vUv.y - 0.5);
-    float softEdge = 1.0 - smoothstep(0.24, 0.5, edgeDistance);
+    float softEdge = 1.0 - smoothstep(0.34, 0.5, edgeDistance);
+    float centerCore = 1.0 - smoothstep(0.0, 0.34, edgeDistance);
     float endFade =
-      smoothstep(0.0, 0.08, vUv.x) *
-      (1.0 - smoothstep(0.91, 1.0, vUv.x));
-
-    float flow = vUv.x * 8.2 - uTime * vFlowSpeed + vSeed * 12.7;
-    float broadSmoke = fbm(vec2(flow, vUv.y * 2.6 + vSeed));
-    float fineSmoke = fbm(vec2(flow * 2.8, vUv.y * 7.0 + vSeed * 4.0));
-    float vapor = smoothstep(0.16, 0.82, broadSmoke * 0.72 + fineSmoke * 0.28);
-    float body = 0.24 + vapor * 0.76;
-    float alpha = softEdge * endFade * body * vOpacity;
+      smoothstep(0.0, 0.06, vUv.x) *
+      (1.0 - smoothstep(0.94, 1.0, vUv.x));
+    float movingPhase = fract(vUv.x * 6.4 - uTime * vFlowSpeed * 0.75 + vSeed);
+    float pulse =
+      smoothstep(0.0, 0.08, movingPhase) *
+      (1.0 - smoothstep(0.16, 0.42, movingPhase));
+    float secondaryPhase = fract(vUv.x * 3.2 - uTime * vFlowSpeed * 0.42 + vSeed * 0.37);
+    float broadPulse =
+      smoothstep(0.0, 0.28, secondaryPhase) *
+      (1.0 - smoothstep(0.28, 0.86, secondaryPhase));
+    float laminarBands =
+      0.86 +
+      0.14 * sin((vUv.x * 72.0 - uTime * vFlowSpeed * 18.0) + vSeed * 8.0);
+    float body = 0.2 + centerCore * 0.34 + pulse * 0.78 + broadPulse * 0.18;
+    float alpha = softEdge * endFade * body * laminarBands * vOpacity;
 
     if (alpha < 0.012) {
       discard;
     }
 
-    vec3 litSmoke = mix(vColor * 0.74, vec3(0.82, 0.97, 1.0), vapor * 0.34);
+    vec3 fastGlow = vec3(0.42, 0.95, 1.0);
+    vec3 finalColor = mix(vColor, fastGlow, pulse * 0.42 + centerCore * 0.1);
 
-    gl_FragColor = vec4(litSmoke, alpha);
+    gl_FragColor = vec4(finalColor, alpha);
   }
 `
 
@@ -463,9 +441,9 @@ function createRibbons() {
       seed,
       phase,
       speedJitter: 0.93 + hashFloat(index + 7.2) * 0.16,
-      width: 0.13 + hashFloat(index + 4.8) * 0.07,
+      width: 0.075 + hashFloat(index + 4.8) * 0.045,
       widthAngle,
-      opacity: 0.2 + hashFloat(index + 12.3) * 0.1,
+      opacity: 0.24 + hashFloat(index + 12.3) * 0.08,
       flowSpeed: 0.68 + hashFloat(index + 18.1) * 0.2,
     }
   })
@@ -503,12 +481,12 @@ function writeVertex(simulation, vertexIndex, point, side, ribbon, profile) {
   simulation.positions[positionCursor + 1] = point.y + offsetY
   simulation.positions[positionCursor + 2] = point.z + offsetZ
 
-  simulation.colors[positionCursor] = 0.45 + surfaceTint * 0.16 + wakeTint * 0.1
-  simulation.colors[positionCursor + 1] = 0.76 + surfaceTint * 0.15
-  simulation.colors[positionCursor + 2] = 0.9 + surfaceTint * 0.08
+  simulation.colors[positionCursor] = 0.08 + surfaceTint * 0.28 + wakeTint * 0.72
+  simulation.colors[positionCursor + 1] = 0.72 + surfaceTint * 0.18 + wakeTint * 0.12
+  simulation.colors[positionCursor + 2] = 1 - wakeTint * 0.46
 
   simulation.opacities[vertexIndex] =
-    ribbon.opacity * (1 + surfaceTint * 0.38 + wakeTint * 0.95)
+    ribbon.opacity * (1 + surfaceTint * 0.32 + wakeTint * 0.72)
   simulation.seeds[vertexIndex] = ribbon.seed
   simulation.flowSpeeds[vertexIndex] = ribbon.flowSpeed
 
@@ -537,7 +515,7 @@ function advancePoint(point, profile, elapsed, dx) {
   projectOutsideObstacle(point, profile)
 }
 
-function writeSmokeGeometry(simulation, profile, elapsed) {
+function writeFlowGeometry(simulation, profile, elapsed) {
   const dx = TUNNEL_LENGTH / (SAMPLES_PER_RIBBON - 1)
   let vertexIndex = 0
 
@@ -601,7 +579,7 @@ function createSimulation() {
     staticAttributesReady: false,
   }
 
-  writeSmokeGeometry(simulation, FLOW_PROFILES.cube, 0)
+  writeFlowGeometry(simulation, FLOW_PROFILES.cube, 0)
 
   return simulation
 }
@@ -622,7 +600,7 @@ function WindParticles({ selectedObjectId }) {
     const elapsed = clock.getElapsedTime()
     const profile = FLOW_PROFILES[selectedObjectId] ?? FLOW_PROFILES.cube
 
-    writeSmokeGeometry(simulation, profile, elapsed)
+    writeFlowGeometry(simulation, profile, elapsed)
     material.uniforms.uTime.value = elapsed
 
     geometry.attributes.position.needsUpdate = true
@@ -659,12 +637,13 @@ function WindParticles({ selectedObjectId }) {
       </bufferGeometry>
       <shaderMaterial
         ref={materialRef}
+        blending={AdditiveBlending}
         depthWrite={false}
-        fragmentShader={SMOKE_FRAGMENT_SHADER}
+        fragmentShader={FLOW_FRAGMENT_SHADER}
         side={DoubleSide}
         transparent
         uniforms={{ uTime: { value: 0 } }}
-        vertexShader={SMOKE_VERTEX_SHADER}
+        vertexShader={FLOW_VERTEX_SHADER}
       />
     </mesh>
   )
