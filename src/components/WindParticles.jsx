@@ -2,9 +2,12 @@ import { useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { MathUtils } from 'three'
 
-const PARTICLE_COUNT = 168
+const STREAM_ROWS = 11
+const STREAM_LAYERS = 7
+const PACKETS_PER_STREAM = 6
+const PARTICLE_COUNT = STREAM_ROWS * STREAM_LAYERS * PACKETS_PER_STREAM
 const TUNNEL_LENGTH = 13
-const STREAM_LENGTH = 0.5
+const STREAM_LENGTH = 0.38
 
 const FLOW_PROFILES = {
   cube: {
@@ -48,19 +51,21 @@ const FLOW_PROFILES = {
 }
 
 function createStreams() {
-  return Array.from({ length: PARTICLE_COUNT }, (_, index) => {
-    const row = index % 14
-    const layer = Math.floor(index / 14) % 12
-    const stagger = ((index * 43) % PARTICLE_COUNT) / PARTICLE_COUNT
+  return Array.from({ length: STREAM_ROWS * STREAM_LAYERS }, (_, streamIndex) => {
+    const row = streamIndex % STREAM_ROWS
+    const layer = Math.floor(streamIndex / STREAM_ROWS)
+    const streamOffset = ((streamIndex * 17) % 19) / 19
 
-    return {
-      x: -TUNNEL_LENGTH / 2 + stagger * TUNNEL_LENGTH,
-      y: (row - 6.5) * 0.235,
-      z: (layer - 5.5) * 0.18,
-      speed: 1.35 + (index % 6) * 0.075,
-      phase: index * 0.73,
-    }
-  })
+    return Array.from({ length: PACKETS_PER_STREAM }, (_, packetIndex) => ({
+      x:
+        -TUNNEL_LENGTH / 2 +
+        ((packetIndex + streamOffset) / PACKETS_PER_STREAM) * TUNNEL_LENGTH,
+      y: (row - (STREAM_ROWS - 1) / 2) * 0.31,
+      z: (layer - (STREAM_LAYERS - 1) / 2) * 0.31,
+      speed: 1.5 + (streamIndex % 4) * 0.045,
+      phase: streamIndex * 0.67,
+    }))
+  }).flat()
 }
 
 function smoothstep(edge0, edge1, value) {
@@ -87,30 +92,39 @@ function getSurfaceFactor(x, profile) {
 function sampleFlow(stream, x, profile, elapsed) {
   const centerY = profile.centerY ?? 0
   const relativeY = stream.y - centerY
-  const normalizedRadius = Math.sqrt(
+  const ellipticalRadius = Math.sqrt(
     (relativeY / profile.radiusY) ** 2 +
       (stream.z / profile.radiusZ) ** 2,
   )
+  const boxRadius = Math.max(
+    Math.abs(relativeY / profile.radiusY),
+    Math.abs(stream.z / profile.radiusZ),
+  )
+  const normalizedRadius = profile.shape === 'box' ? boxRadius : ellipticalRadius
   const affectedStream = normalizedRadius < profile.influence
   let y = stream.y
   let z = stream.z
 
   if (affectedStream) {
     const surface = getSurfaceFactor(x, profile)
+    const approachRadius =
+      0.78 *
+      smoothstep(-2.65, -profile.halfLength, x) *
+      (1 - smoothstep(-profile.halfLength, 0, x))
     const upstream = smoothstep(-2.5, -profile.halfLength * 0.35, x)
     const downstream = 1 - smoothstep(profile.halfLength * 0.2, 2.25, x)
     const contourWeight = x < 0 ? upstream : downstream
-    const targetRadius = surface * 1.08
+    const targetRadius = Math.max(surface * 1.1, approachRadius)
     const displacement = Math.max(0, targetRadius - normalizedRadius)
     const centerLine = normalizedRadius < 0.055
     const directionY = centerLine
       ? Math.sin(stream.phase) >= 0
         ? 1
         : -1
-      : relativeY / (normalizedRadius * profile.radiusY)
+      : relativeY / (ellipticalRadius * profile.radiusY)
     const directionZ = centerLine
       ? Math.cos(stream.phase)
-      : stream.z / (normalizedRadius * profile.radiusZ)
+      : stream.z / (ellipticalRadius * profile.radiusZ)
     const directionLength = Math.hypot(directionY, directionZ) || 1
 
     y +=
@@ -132,13 +146,13 @@ function sampleFlow(stream, x, profile, elapsed) {
     const fade = (1 - wakeProgress) ** 1.35
     const centerWeight = Math.max(0, 1 - normalizedRadius / profile.influence)
     const oscillation =
-      Math.sin(elapsed * 7 + stream.phase + x * 2.4) *
+      Math.sin(elapsed * 5.4 - x * 3.1 + stream.phase) *
       profile.wakeStrength *
       fade *
       centerWeight
 
     y += oscillation
-    z += Math.cos(elapsed * 5.5 + stream.phase) * oscillation * 0.55
+    z += Math.cos(elapsed * 4.1 - x * 2.6 + stream.phase) * oscillation * 0.45
   }
 
   if (profile.liftBias) {
@@ -200,7 +214,7 @@ function WindParticles({ selectedObjectId }) {
       </bufferGeometry>
       <lineBasicMaterial
         color="#7dd3fc"
-        opacity={0.7}
+        opacity={0.62}
         transparent
         depthWrite={false}
       />
