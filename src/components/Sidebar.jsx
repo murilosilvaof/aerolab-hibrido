@@ -1,4 +1,11 @@
-function Sidebar({ objects, selectedObject, onSelectObject }) {
+import PhotoObjectPanel from './PhotoObjectPanel'
+
+function Sidebar({
+  objects,
+  selectedObject,
+  onCreatePhotoObject,
+  onSelectObject,
+}) {
   const metricLabels = {
     drag: 'Arrasto',
     lift: 'Sust.',
@@ -48,6 +55,11 @@ function Sidebar({ objects, selectedObject, onSelectObject }) {
           )
         })}
       </nav>
+
+      <PhotoObjectPanel
+        selectedObject={selectedObject}
+        onCreatePhotoObject={onCreatePhotoObject}
+      />
 
       <section className="mt-7 rounded-md border border-white/10 bg-slate-900/80 p-5 shadow-xl shadow-black/20">
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-300">

@@ -162,6 +162,26 @@ const FLOW_PROFILES = {
     shedding: 6.6,
     wakeExpansion: 0.62,
   },
+  'photo-object': {
+    kind: 'cube',
+    halfX: 0.44,
+    halfY: 0.82,
+    halfZ: 0.9,
+    influence: 1.08,
+    speed: 1.7,
+    split: 1.08,
+    deflection: 1.12,
+    sideAcceleration: 0.36,
+    wakeStart: 0.48,
+    wakeLength: 4,
+    wakeRadiusY: 0.92,
+    wakeRadiusZ: 1,
+    wakeDrag: 0.56,
+    recirculation: 0.11,
+    vortex: 0.34,
+    shedding: 6.8,
+    wakeExpansion: 0.58,
+  },
 }
 
 function hashFloat(value) {

@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
-import { OrbitControls } from '@react-three/drei'
+import { OrbitControls, useTexture } from '@react-three/drei'
 import { MathUtils } from 'three'
 import WindParticles from './WindParticles'
 
@@ -44,7 +44,7 @@ function AerodynamicObject({ selectedObject }) {
     if (groupRef.current) {
       groupRef.current.scale.setScalar(0.72)
     }
-  }, [selectedObject.id])
+  }, [selectedObject.id, selectedObject.imageUrl])
 
   useFrame((_, delta) => {
     const group = groupRef.current
@@ -60,12 +60,23 @@ function AerodynamicObject({ selectedObject }) {
     <group ref={groupRef} position={[0, 0, 0]} castShadow>
       {/* Substitua estas geometrias por modelos reais carregados com useGLTF/useLoader.
           Exemplo futuro: <primitive object={gltf.scene} scale={...} /> */}
-      <ObjectGeometry type={selectedObject.id} color={selectedObject.color} />
+      <ObjectGeometry selectedObject={selectedObject} />
     </group>
   )
 }
 
-function ObjectGeometry({ type, color }) {
+function ObjectGeometry({ selectedObject }) {
+  const { color, id: type } = selectedObject
+
+  if (selectedObject.imageUrl) {
+    return (
+      <PhotoExtrusion
+        key={selectedObject.imageUrl}
+        selectedObject={selectedObject}
+      />
+    )
+  }
+
   if (type === 'sphere') {
     return (
       <mesh castShadow receiveShadow>
@@ -139,6 +150,78 @@ function ObjectGeometry({ type, color }) {
       <boxGeometry args={[1.55, 1.55, 1.55]} />
       <meshStandardMaterial color={color} metalness={0.1} roughness={0.45} />
     </mesh>
+  )
+}
+
+function PhotoExtrusion({ selectedObject }) {
+  const texture = useTexture(selectedObject.imageUrl)
+  const dimensions = selectedObject.dimensions ?? {
+    depth: 0.46,
+    height: 1.35,
+    width: 1.35,
+  }
+
+  return (
+    <group>
+      {/* MVP: a foto vira uma extrusao texturizada.
+          Futuro: trocar este bloco por um modelo .glb gerado por fotogrametria/IA. */}
+      <mesh castShadow receiveShadow>
+        <boxGeometry
+          args={[dimensions.depth, dimensions.height, dimensions.width]}
+        />
+        <meshStandardMaterial
+          attach="material-0"
+          map={texture}
+          metalness={0.06}
+          roughness={0.48}
+        />
+        <meshStandardMaterial
+          attach="material-1"
+          map={texture}
+          metalness={0.06}
+          roughness={0.48}
+        />
+        <meshStandardMaterial
+          attach="material-2"
+          color={selectedObject.color}
+          metalness={0.1}
+          roughness={0.55}
+        />
+        <meshStandardMaterial
+          attach="material-3"
+          color={selectedObject.color}
+          metalness={0.1}
+          roughness={0.55}
+        />
+        <meshStandardMaterial
+          attach="material-4"
+          color="#0f766e"
+          metalness={0.08}
+          roughness={0.6}
+        />
+        <meshStandardMaterial
+          attach="material-5"
+          color="#0f766e"
+          metalness={0.08}
+          roughness={0.6}
+        />
+      </mesh>
+      <mesh
+        scale={[1.015, 1.015, 1.015]}
+        castShadow={false}
+        receiveShadow={false}
+      >
+        <boxGeometry
+          args={[dimensions.depth, dimensions.height, dimensions.width]}
+        />
+        <meshBasicMaterial
+          color="#cffafe"
+          opacity={0.18}
+          transparent
+          wireframe
+        />
+      </mesh>
+    </group>
   )
 }
 
