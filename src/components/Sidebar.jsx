@@ -1,39 +1,70 @@
+import { useState } from 'react'
+
 const easyQuestions = [
   {
+    example: 'Exemplo: cubo e esfera no mesmo fluxo de ar.',
     question:
       'Ao comparar o cubo e a esfera no tunel, qual deles tende a desviar o ar de forma mais suave?',
-    answer: 'A esfera.',
+    options: ['O cubo', 'A esfera', 'Os dois desviam igual'],
+    correctIndex: 1,
     reason:
       'Como ela nao tem faces planas, o ar consegue contornar melhor sua superficie.',
   },
   {
+    example: 'Exemplo: uma regiao agitada aparece atras do objeto.',
     question:
       'Se o ar fica muito baguncado atras de um objeto, que efeito geralmente aumenta?',
-    answer: 'O arrasto.',
+    options: ['O arrasto', 'A transparencia', 'A temperatura do objeto'],
+    correctIndex: 0,
     reason:
       'Uma esteira mais turbulenta indica maior resistencia ao movimento.',
   },
   {
+    example: 'Exemplo: carros modernos costumam ter frente arredondada.',
     question:
       'Por que carros costumam ter formas mais arredondadas na frente?',
-    answer: 'Para reduzir a resistencia do ar.',
+    options: [
+      'Para reduzir a resistencia do ar',
+      'Para pesar mais',
+      'Para aumentar a area frontal',
+    ],
+    correctIndex: 0,
     reason:
       'Formas suaves ajudam o fluxo a se separar menos bruscamente.',
   },
   {
+    example: 'Exemplo: o aviao 3D usa asas para interagir com o fluxo.',
     question:
       'O perfil de asa serve para mostrar principalmente qual ideia da aerodinamica?',
-    answer: 'Sustentacao.',
+    options: ['Atrito no chao', 'Sustentacao', 'Som do motor'],
+    correctIndex: 1,
     reason:
       'A asa altera o caminho do ar e pode gerar forca para cima.',
   },
 ]
 
 function Sidebar({ objects, selectedObject, onSelectObject }) {
+  const [selectedAnswers, setSelectedAnswers] = useState({})
+
   const metricLabels = {
     drag: 'Arrasto',
     lift: 'Sust.',
     flow: 'Fluxo',
+  }
+  const answeredCount = Object.keys(selectedAnswers).length
+  const score = easyQuestions.reduce((total, question, index) => {
+    return selectedAnswers[index] === question.correctIndex ? total + 1 : total
+  }, 0)
+
+  function handleAnswer(questionIndex, optionIndex) {
+    setSelectedAnswers((currentAnswers) => ({
+      ...currentAnswers,
+      [questionIndex]: optionIndex,
+    }))
+  }
+
+  function resetQuiz() {
+    setSelectedAnswers({})
   }
 
   return (
@@ -109,26 +140,86 @@ function Sidebar({ objects, selectedObject, onSelectObject }) {
       </section>
 
       <section className="mt-7 rounded-md border border-purple-300/15 bg-purple-950/20 p-5">
-        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-purple-300">
-          Quest&otilde;es estilo ENEM
-        </p>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-purple-300">
+              Quiz estilo ENEM
+            </p>
+            <p className="mt-2 text-xs leading-5 text-slate-400">
+              {answeredCount}/{easyQuestions.length} respondidas - {score}{' '}
+              acertos
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={resetQuiz}
+            className="rounded-md border border-white/10 px-2.5 py-1.5 text-xs font-semibold text-slate-300 transition hover:border-purple-300/50 hover:bg-purple-300/10 focus:outline-none focus:ring-2 focus:ring-purple-300/70"
+          >
+            Reiniciar
+          </button>
+        </div>
         <div className="mt-4 space-y-4">
-          {easyQuestions.map((item, index) => (
-            <article key={item.question} className="border-t border-white/10 pt-4 first:border-t-0 first:pt-0">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                Quest&atilde;o {index + 1}
-              </p>
-              <p className="mt-2 text-sm leading-6 text-slate-200">
-                {item.question}
-              </p>
-              <p className="mt-3 text-sm font-semibold text-purple-200">
-                Resposta: {item.answer}
-              </p>
-              <p className="mt-1 text-xs leading-5 text-slate-400">
-                {item.reason}
-              </p>
-            </article>
-          ))}
+          {easyQuestions.map((item, questionIndex) => {
+            const selectedOption = selectedAnswers[questionIndex]
+            const hasAnswered = selectedOption !== undefined
+
+            return (
+              <article
+                key={item.question}
+                className="border-t border-white/10 pt-4 first:border-t-0 first:pt-0"
+              >
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                  Quest&atilde;o {questionIndex + 1}
+                </p>
+                <p className="mt-2 rounded-md border border-white/10 bg-black/30 px-3 py-2 text-xs leading-5 text-slate-400">
+                  {item.example}
+                </p>
+                <p className="mt-3 text-sm leading-6 text-slate-200">
+                  {item.question}
+                </p>
+                <div className="mt-3 grid gap-2">
+                  {item.options.map((option, optionIndex) => {
+                    const isSelected = selectedOption === optionIndex
+                    const isCorrect = item.correctIndex === optionIndex
+                    const shouldShowCorrect = hasAnswered && isCorrect
+                    const shouldShowWrong = isSelected && !isCorrect
+
+                    return (
+                      <button
+                        key={option}
+                        type="button"
+                        aria-pressed={isSelected}
+                        onClick={() => handleAnswer(questionIndex, optionIndex)}
+                        className={[
+                          'rounded-md border px-3 py-2 text-left text-sm font-semibold transition',
+                          'focus:outline-none focus:ring-2 focus:ring-purple-300/70',
+                          shouldShowCorrect
+                            ? 'border-emerald-300/70 bg-emerald-400/20 text-emerald-100 shadow-[0_0_18px_rgba(52,211,153,0.16)]'
+                            : '',
+                          shouldShowWrong
+                            ? 'border-rose-300/70 bg-rose-500/20 text-rose-100 shadow-[0_0_18px_rgba(244,63,94,0.14)]'
+                            : '',
+                          !shouldShowCorrect && !shouldShowWrong
+                            ? 'border-white/10 bg-white/[0.04] text-slate-200 hover:border-purple-300/50 hover:bg-purple-300/10'
+                            : '',
+                        ].join(' ')}
+                      >
+                        {option}
+                      </button>
+                    )
+                  })}
+                </div>
+                {hasAnswered && (
+                  <p className="mt-3 text-xs leading-5 text-slate-300">
+                    {selectedOption === item.correctIndex
+                      ? 'Correto. '
+                      : 'Quase. '}
+                    {item.reason}
+                  </p>
+                )}
+              </article>
+            )
+          })}
         </div>
       </section>
 
