@@ -30,11 +30,11 @@ export const aeroObjects = [
   {
     id: 'wing',
     label: 'Perfil de Asa',
-    tag: 'Sustenta\u00e7\u00e3o',
+    tag: 'Aviao 3D',
     color: '#8b5cf6',
-    definitionTitle: 'Sustenta\u00e7\u00e3o e \u00e2ngulo de ataque',
+    definitionTitle: 'Sustentacao em um aviao',
     definition:
-      'Um perfil achatado pode direcionar o escoamento e criar diferen\u00e7a de press\u00e3o entre as faces. Esse efeito e a base da sustenta\u00e7\u00e3o aerodin\u00e2mica.',
+      'O aviao mostra como asas podem direcionar o escoamento do ar e gerar sustentacao. O formato das asas ajuda a explicar por que uma aeronave consegue se manter no ar.',
     metrics: {
       drag: 'Baixo',
       lift: 'Alta',

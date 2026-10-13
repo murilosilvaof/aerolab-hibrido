@@ -86,26 +86,7 @@ function ObjectGeometry({ selectedObject }) {
   }
 
   if (type === 'wing') {
-    return (
-      <group rotation={[0, 0, -0.1]}>
-        <mesh castShadow receiveShadow>
-          <boxGeometry args={[3.1, 0.22, 1.05]} />
-          <meshStandardMaterial
-            color={color}
-            metalness={0.22}
-            roughness={0.32}
-          />
-        </mesh>
-        <mesh position={[-1.65, 0, 0]} castShadow receiveShadow>
-          <sphereGeometry args={[0.18, 32, 16]} />
-          <meshStandardMaterial
-            color="#e9d5ff"
-            metalness={0.15}
-            roughness={0.42}
-          />
-        </mesh>
-      </group>
-    )
+    return <AirplaneModel color={color} />
   }
 
   if (type === 'car') {
@@ -145,6 +126,55 @@ function ObjectGeometry({ selectedObject }) {
       <boxGeometry args={[1.55, 1.55, 1.55]} />
       <meshStandardMaterial color={color} metalness={0.1} roughness={0.45} />
     </mesh>
+  )
+}
+
+function AirplaneModel({ color }) {
+  return (
+    <group rotation={[0, 0, -0.08]} scale={0.95}>
+      <mesh rotation={[0, 0, Math.PI / 2]} castShadow receiveShadow>
+        <cylinderGeometry args={[0.25, 0.3, 2.75, 40]} />
+        <meshStandardMaterial color={color} metalness={0.24} roughness={0.34} />
+      </mesh>
+
+      <mesh position={[-1.62, 0, 0]} rotation={[0, 0, Math.PI / 2]} castShadow receiveShadow>
+        <coneGeometry args={[0.31, 0.62, 40]} />
+        <meshStandardMaterial color="#e9d5ff" metalness={0.18} roughness={0.32} />
+      </mesh>
+
+      <mesh position={[-0.2, -0.02, 0]} castShadow receiveShadow>
+        <boxGeometry args={[1.1, 0.08, 3.25]} />
+        <meshStandardMaterial color="#a78bfa" metalness={0.2} roughness={0.36} />
+      </mesh>
+
+      <mesh position={[1.18, 0.02, 0]} castShadow receiveShadow>
+        <boxGeometry args={[0.58, 0.06, 1.22]} />
+        <meshStandardMaterial color="#c084fc" metalness={0.18} roughness={0.38} />
+      </mesh>
+
+      <mesh position={[1.28, 0.38, 0]} castShadow receiveShadow>
+        <boxGeometry args={[0.5, 0.78, 0.08]} />
+        <meshStandardMaterial color="#9333ea" metalness={0.2} roughness={0.4} />
+      </mesh>
+
+      {[-0.68, 0.68].map((z) => (
+        <mesh
+          key={z}
+          position={[-0.18, -0.23, z]}
+          rotation={[0, 0, Math.PI / 2]}
+          castShadow
+          receiveShadow
+        >
+          <cylinderGeometry args={[0.13, 0.13, 0.34, 28]} />
+          <meshStandardMaterial color="#6d28d9" metalness={0.22} roughness={0.42} />
+        </mesh>
+      ))}
+
+      <mesh position={[-0.58, 0.18, 0]} castShadow receiveShadow>
+        <boxGeometry args={[0.48, 0.06, 0.42]} />
+        <meshStandardMaterial color="#f5d0fe" metalness={0.08} roughness={0.28} />
+      </mesh>
+    </group>
   )
 }
 
