@@ -1,0 +1,35 @@
+AeroLab Hibrido - third-party 3D assets
+
+Ferrari 458 Italia
+Author: vicent091036
+Original: https://sketchfab.com/models/57bf6cc56931426e87494f554df1dab6
+Distribution: https://github.com/mrdoob/three.js/blob/r186/examples/models/gltf/ferrari.glb
+License: Creative Commons Attribution 4.0 International
+https://creativecommons.org/licenses/by/4.0/
+Adaptations: purple paint, glass/metal finishes, orientation and display scale.
+The sports-car.glb geometry is unmodified.
+
+Boeing 787-9
+Original modeling project: FlightGear / FGMEMBERS 787-9
+https://github.com/FGMEMBERS/787-9
+Distribution and conversion: Flightradar24
+https://github.com/Flightradar24/fr24-3d-models
+Editable source: https://github.com/Flightradar24/fr24-3d-models/tree/master/source/b789
+License: GNU General Public License, version 2 (see GPL-2.0.txt).
+Original binary: airliner-source.glb (provided alongside airliner.glb).
+Preferred editable source and textures: airliner-source.blend and
+airliner-source-textures.zip (also provided alongside airliner.glb).
+Adaptations by AeroLab Hibrido, 2026-10-15:
+Converted from glTF 1 to glTF 2 with Cesium gltf-pipeline.
+Display scale, orientation and lavender material tint applied at runtime.
+No warranty is provided for the models.
+
+Draco decoder
+Copyright the Draco Authors. Apache License 2.0.
+https://github.com/google/draco
+See /draco/LICENSE.txt for the license.
+
+Formula 1 quiz reference
+https://www.formula1.com/en/latest/article/f1-explains-downforce-and-why-f1-cars-have-wings-with-mclaren-aero.10xj8CJPz8s7CmwfoyWmCU
+Questions and explanations are original educational examples by AeroLab;
+they are not official ENEM exam questions.

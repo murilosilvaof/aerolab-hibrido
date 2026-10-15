@@ -121,10 +121,10 @@ const FLOW_PROFILES = {
     potentialRange: 2.55,
   },
   wing: {
-    kind: 'wing',
-    halfX: 1.58,
+    kind: 'airplane',
+    halfX: 1.78,
     halfY: 0.18,
-    halfZ: 0.62,
+    halfZ: 1.62,
     influence: 0.78,
     speed: 1.94,
     split: 0.2,
@@ -146,13 +146,13 @@ const FLOW_PROFILES = {
   },
   car: {
     kind: 'car',
-    halfX: 1.22,
+    halfX: 1.6,
     influence: 1.02,
     speed: 1.72,
     split: 0.98,
     deflection: 1.08,
     sideAcceleration: 0.34,
-    wakeStart: 1.05,
+    wakeStart: 1.45,
     wakeLength: 4.45,
     wakeRadiusY: 0.9,
     wakeRadiusZ: 0.92,
@@ -186,10 +186,6 @@ function sdBox(x, y, z, halfX, halfY, halfZ) {
   return outside + inside
 }
 
-function sdRoundBox(x, y, z, halfX, halfY, halfZ, radius) {
-  return sdBox(x, y, z, halfX, halfY, halfZ) - radius
-}
-
 function sdEllipsoid(x, y, z, radiusX, radiusY, radiusZ) {
   const k0 = Math.hypot(x / radiusX, y / radiusY, z / radiusZ)
   const k1 = Math.hypot(
@@ -219,29 +215,25 @@ function sdfAt(x, y, z, profile) {
     return Math.hypot(x, y, z) - profile.radius
   }
 
-  if (profile.kind === 'wing') {
-    const normalizedX = MathUtils.clamp(x / profile.halfX, -1, 1)
-    const taper = Math.sqrt(Math.max(0.08, 1 - normalizedX * normalizedX))
-    const centerY =
-      profile.camber * (1 - normalizedX * normalizedX) - x * profile.angle
+  if (profile.kind === 'airplane') {
+    // Union of rounded envelopes for the fuselage, swept wings, tail and engines.
+    const span = Math.min(Math.abs(z) / 1.62, 1)
+    const fuselage = sdEllipsoid(x, y + 0.22, z, 1.78, 0.18, 0.18)
+    const wings = sdBox(x - (-0.33 + span * 0.7), y + 0.22 - span * 0.08, z, 0.46 - span * 0.32, 0.035, 1.62)
+    const stabilizer = sdBox(x - 1.28, y + 0.13, z, 0.28, 0.035, 0.65)
+    const fin = sdBox(x - 1.43, y - 0.1, z, 0.26, 0.32, 0.035)
+    const engine = sdEllipsoid(x + 0.15, y + 0.32, Math.abs(z) - 0.48, 0.24, 0.12, 0.12)
 
-    return sdEllipsoid(
-      x,
-      y - centerY,
-      z,
-      profile.halfX,
-      profile.halfY * (0.45 + taper * 0.65),
-      profile.halfZ,
-    )
+    return Math.min(fuselage, wings, stabilizer, fin, engine)
   }
 
   if (profile.kind === 'car') {
-    const body = sdRoundBox(x, y - 0.15, z, 1.18, 0.25, 0.53, 0.11)
-    const cabin = sdRoundBox(x + 0.25, y - 0.58, z, 0.54, 0.26, 0.42, 0.09)
-    const wheelA = sdCylinderZ(x, y, z, -0.72, -0.16, -0.56, 0.23, 0.1)
-    const wheelB = sdCylinderZ(x, y, z, 0.72, -0.16, -0.56, 0.23, 0.1)
-    const wheelC = sdCylinderZ(x, y, z, -0.72, -0.16, 0.56, 0.23, 0.1)
-    const wheelD = sdCylinderZ(x, y, z, 0.72, -0.16, 0.56, 0.23, 0.1)
+    const body = sdEllipsoid(x, y + 0.12, z, 1.62, 0.3, 0.8)
+    const cabin = sdEllipsoid(x - 0.12, y - 0.17, z, 0.78, 0.28, 0.6)
+    const wheelA = sdCylinderZ(x, y, z, -0.82, -0.18, -0.62, 0.255, 0.12)
+    const wheelB = sdCylinderZ(x, y, z, 1.05, -0.18, -0.62, 0.255, 0.12)
+    const wheelC = sdCylinderZ(x, y, z, -0.82, -0.18, 0.62, 0.255, 0.12)
+    const wheelD = sdCylinderZ(x, y, z, 1.05, -0.18, 0.62, 0.255, 0.12)
 
     return Math.min(body, cabin, wheelA, wheelB, wheelC, wheelD)
   }
@@ -345,13 +337,13 @@ function applyObstacleDeflection(point, profile, velocity) {
 }
 
 function applyWingDownwash(point, profile, velocity) {
-  if (profile.kind !== 'wing') {
+  if (profile.kind !== 'airplane') {
     return
   }
 
   const crossSection =
     (1 - smoothstep(0.2, 1.55, Math.abs(point.y))) *
-    (1 - smoothstep(0.45, 1.35, Math.abs(point.z)))
+    (1 - smoothstep(1.25, 1.85, Math.abs(point.z)))
   const upwash =
     smoothstep(-3.1, -profile.halfX, point.x) *
     (1 - smoothstep(-profile.halfX, -0.15, point.x))
@@ -375,7 +367,7 @@ function applyWake(point, profile, elapsed, velocity) {
   }
 
   const wakeCenterY =
-    profile.kind === 'wing'
+    profile.kind === 'airplane'
       ? -profile.downwash * smoothstep(0.08, 0.85, progress) * 1.1
       : profile.kind === 'car'
         ? 0.1

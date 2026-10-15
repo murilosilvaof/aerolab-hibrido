@@ -2,6 +2,34 @@ import { useState } from 'react'
 
 const easyQuestions = [
   {
+    example:
+      'F\u00f3rmula 1: um piloto faz uma curva em alta velocidade. As asas e o assoalho do carro interagem com o ar.',
+    question:
+      'Como a press\u00e3o aerodin\u00e2mica (downforce) ajuda esse carro na curva?',
+    options: [
+      'Levanta os pneus e diminui o contato com a pista',
+      'Pressiona o carro contra a pista e aumenta a ader\u00eancia',
+      'Substitui a frenagem feita pelos pneus',
+    ],
+    correctIndex: 1,
+    reason:
+      'O downforce \u00e9 uma for\u00e7a do ar para baixo. Ele aumenta a carga nos pneus e ajuda o carro a fazer curvas mais r\u00e1pidas. No avi\u00e3o, a sustenta\u00e7\u00e3o atua para cima.',
+  },
+  {
+    example:
+      'F\u00f3rmula 1: na reta, a equipe busca diminuir a resist\u00eancia que o ar faz ao movimento do carro.',
+    question:
+      'Com a mesma pot\u00eancia do motor, por que reduzir o arrasto ajuda na velocidade?',
+    options: [
+      'Porque o ar oferece menos resist\u00eancia ao avan\u00e7o',
+      'Porque a resist\u00eancia do ar fica maior',
+      'Porque o motor deixa de ser necess\u00e1rio',
+    ],
+    correctIndex: 0,
+    reason:
+      'Menos arrasto facilita atingir maior velocidade na reta. J\u00e1 nas curvas, o downforce ajuda na ader\u00eancia. As equipes equilibram os dois efeitos para cada pista.',
+  },
+  {
     example: 'Exemplo: cubo e esfera no mesmo fluxo de ar.',
     question:
       'Ao comparar o cubo e a esfera no tunel, qual deles tende a desviar o ar de forma mais suave?',
@@ -210,10 +238,10 @@ function Sidebar({ objects, selectedObject, onSelectObject }) {
                   })}
                 </div>
                 {hasAnswered && (
-                  <p className="mt-3 text-xs leading-5 text-slate-300">
+                  <p role="status" aria-live="polite" className="mt-3 text-xs leading-5 text-slate-300">
                     {selectedOption === item.correctIndex
                       ? 'Correto. '
-                      : 'Quase. '}
+                      : 'Resposta incorreta. '}
                     {item.reason}
                   </p>
                 )}
@@ -228,6 +256,19 @@ function Sidebar({ objects, selectedObject, onSelectObject }) {
           M&oacute;dulo inicial para aulas pr&aacute;ticas de mec&acirc;nica dos
           fluidos.
         </p>
+        <details className="mt-3">
+          <summary className="cursor-pointer text-slate-400 focus-visible:outline focus-visible:outline-purple-300">
+            Cr&eacute;ditos dos modelos 3D
+          </summary>
+          <p className="mt-2">
+            Ferrari 458: <a className="text-purple-300 underline" href="https://sketchfab.com/models/57bf6cc56931426e87494f554df1dab6" target="_blank" rel="noreferrer">vicent091036</a>,{' '}
+            <a className="underline" href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">CC BY 4.0</a>. Pintura e materiais adaptados.
+          </p>
+          <p className="mt-2">
+            Boeing 787-9: <a className="text-purple-300 underline" href="https://github.com/Flightradar24/fr24-3d-models" target="_blank" rel="noreferrer">FlightGear / Flightradar24</a>, GPL v2. Formato e materiais adaptados.
+          </p>
+          <a className="mt-2 inline-block underline" href="/models/credits.txt" target="_blank" rel="noreferrer">Fontes e licen&ccedil;as</a>
+        </details>
       </div>
     </aside>
   )

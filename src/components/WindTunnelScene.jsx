@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useRef } from 'react'
-import { Canvas, useFrame } from '@react-three/fiber'
-import { OrbitControls } from '@react-three/drei'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
+import { Environment, Lightformer, OrbitControls } from '@react-three/drei'
 import { AdditiveBlending, MathUtils } from 'three'
+import DetailedModel from './DetailedModel'
 import WindParticles from './WindParticles'
 
 function WindTunnelScene({ selectedObject }) {
   return (
     <Canvas
-      camera={{ position: [4.2, 2.6, 5.6], fov: 45 }}
+      camera={{ position: [-4.6, 2.5, 5.8], fov: 45 }}
+      dpr={[1, 1.5]}
       gl={{ antialias: true }}
       shadows
     >
@@ -15,6 +17,7 @@ function WindTunnelScene({ selectedObject }) {
       <fog attach="fog" args={['#05000b', 7, 16]} />
 
       <GalaxyBackdrop />
+      <ResponsiveCamera />
 
       <ambientLight intensity={0.48} />
       <directionalLight
@@ -27,6 +30,14 @@ function WindTunnelScene({ selectedObject }) {
       <pointLight color="#c084fc" intensity={1.55} position={[-4, 1.4, 2]} />
       <pointLight color="#67e8f9" intensity={0.8} position={[3, -0.6, -3]} />
 
+      {(selectedObject.id === 'car' || selectedObject.id === 'wing') && (
+        <Environment resolution={128} environmentIntensity={0.7}>
+          <Lightformer intensity={3} position={[0, 4, 0]} rotation={[Math.PI / 2, 0, 0]} scale={[8, 4, 1]} />
+          <Lightformer intensity={2} position={[0, 1, 5]} rotation={[0, Math.PI, 0]} scale={[10, 2, 1]} />
+          <Lightformer intensity={2} position={[0, 2, -5]} scale={[8, 2, 1]} />
+        </Environment>
+      )}
+
       <TunnelFrame />
       <WindParticles selectedObjectId={selectedObject.id} />
       <AerodynamicObject selectedObject={selectedObject} />
@@ -34,11 +45,25 @@ function WindTunnelScene({ selectedObject }) {
       <OrbitControls
         enableDamping
         dampingFactor={0.08}
-        maxDistance={9}
+        maxDistance={14}
         minDistance={3.2}
       />
     </Canvas>
   )
+}
+
+function ResponsiveCamera() {
+  const camera = useThree((state) => state.camera)
+  const { width, height } = useThree((state) => state.size)
+
+  useEffect(() => {
+    const distanceScale = Math.max(1, height / width)
+    camera.position.set(-4.6 * distanceScale, 2.5 * distanceScale, 5.8 * distanceScale)
+    camera.lookAt(0, 0, 0)
+    camera.updateProjectionMatrix()
+  }, [camera, width, height])
+
+  return null
 }
 
 function AerodynamicObject({ selectedObject }) {
@@ -62,8 +87,6 @@ function AerodynamicObject({ selectedObject }) {
 
   return (
     <group ref={groupRef} position={[0, 0, 0]} castShadow>
-      {/* Substitua estas geometrias por modelos reais carregados com useGLTF/useLoader.
-          Exemplo futuro: <primitive object={gltf.scene} scale={...} /> */}
       <ObjectGeometry selectedObject={selectedObject} />
     </group>
   )
@@ -85,40 +108,8 @@ function ObjectGeometry({ selectedObject }) {
     )
   }
 
-  if (type === 'wing') {
-    return <AirplaneModel color={color} />
-  }
-
-  if (type === 'car') {
-    return (
-      <group>
-        <mesh position={[0, 0.15, 0]} castShadow receiveShadow>
-          <boxGeometry args={[2.35, 0.48, 1.05]} />
-          <meshStandardMaterial
-            color={color}
-            metalness={0.18}
-            roughness={0.36}
-          />
-        </mesh>
-        <mesh position={[-0.25, 0.58, 0]} castShadow receiveShadow>
-          <boxGeometry args={[1.05, 0.48, 0.82]} />
-          <meshStandardMaterial color="#d946ef" roughness={0.34} />
-        </mesh>
-        {[-0.72, 0.72].map((x) =>
-          [-0.56, 0.56].map((z) => (
-            <mesh
-              key={`${x}-${z}`}
-              position={[x, -0.16, z]}
-              rotation={[Math.PI / 2, 0, 0]}
-              castShadow
-            >
-              <cylinderGeometry args={[0.22, 0.22, 0.16, 32]} />
-              <meshStandardMaterial color="#0f172a" roughness={0.55} />
-            </mesh>
-          )),
-        )}
-      </group>
-    )
+  if (type === 'wing' || type === 'car') {
+    return <DetailedModel type={type} color={color} />
   }
 
   return (
@@ -126,139 +117,6 @@ function ObjectGeometry({ selectedObject }) {
       <boxGeometry args={[1.55, 1.55, 1.55]} />
       <meshStandardMaterial color={color} metalness={0.1} roughness={0.45} />
     </mesh>
-  )
-}
-
-function AirplaneModel({ color }) {
-  return (
-    <group rotation={[0, 0, -0.08]} scale={1.05}>
-      <mesh rotation={[0, 0, Math.PI / 2]} castShadow receiveShadow>
-        <cylinderGeometry args={[0.24, 0.34, 3.05, 48]} />
-        <meshStandardMaterial color={color} metalness={0.24} roughness={0.34} />
-      </mesh>
-
-      <mesh
-        position={[-1.82, 0, 0]}
-        rotation={[0, 0, Math.PI / 2]}
-        castShadow
-        receiveShadow
-      >
-        <coneGeometry args={[0.34, 0.72, 48]} />
-        <meshStandardMaterial
-          color="#f5d0fe"
-          metalness={0.18}
-          roughness={0.3}
-        />
-      </mesh>
-
-      <mesh
-        position={[1.72, 0, 0]}
-        rotation={[0, 0, -Math.PI / 2]}
-        castShadow
-        receiveShadow
-      >
-        <coneGeometry args={[0.25, 0.42, 40]} />
-        <meshStandardMaterial
-          color="#7c3aed"
-          metalness={0.2}
-          roughness={0.38}
-        />
-      </mesh>
-
-      <mesh position={[-0.58, 0.2, 0]} castShadow receiveShadow>
-        <boxGeometry args={[0.55, 0.08, 0.5]} />
-        <meshStandardMaterial
-          color="#f5d0fe"
-          metalness={0.06}
-          roughness={0.24}
-        />
-      </mesh>
-
-      <mesh position={[-0.15, -0.03, -1.08]} rotation={[0, -0.08, 0.03]} castShadow receiveShadow>
-        <boxGeometry args={[1.15, 0.08, 1.75]} />
-        <meshStandardMaterial
-          color="#a78bfa"
-          metalness={0.22}
-          roughness={0.34}
-        />
-      </mesh>
-
-      <mesh position={[-0.15, -0.03, 1.08]} rotation={[0, 0.08, -0.03]} castShadow receiveShadow>
-        <boxGeometry args={[1.15, 0.08, 1.75]} />
-        <meshStandardMaterial
-          color="#a78bfa"
-          metalness={0.22}
-          roughness={0.34}
-        />
-      </mesh>
-
-      <mesh position={[1.28, 0.02, -0.48]} rotation={[0, -0.08, 0]} castShadow receiveShadow>
-        <boxGeometry args={[0.64, 0.06, 0.96]} />
-        <meshStandardMaterial
-          color="#c084fc"
-          metalness={0.18}
-          roughness={0.38}
-        />
-      </mesh>
-
-      <mesh position={[1.28, 0.02, 0.48]} rotation={[0, 0.08, 0]} castShadow receiveShadow>
-        <boxGeometry args={[0.64, 0.06, 0.96]} />
-        <meshStandardMaterial
-          color="#c084fc"
-          metalness={0.18}
-          roughness={0.38}
-        />
-      </mesh>
-
-      <mesh position={[1.36, 0.46, 0]} castShadow receiveShadow>
-        <boxGeometry args={[0.54, 0.9, 0.08]} />
-        <meshStandardMaterial
-          color="#9333ea"
-          metalness={0.2}
-          roughness={0.4}
-        />
-      </mesh>
-
-      {[-0.68, 0.68].map((z) => (
-        <mesh
-          key={z}
-          position={[-0.18, -0.23, z]}
-          rotation={[0, 0, Math.PI / 2]}
-          castShadow
-          receiveShadow
-        >
-          <cylinderGeometry args={[0.15, 0.15, 0.4, 32]} />
-          <meshStandardMaterial
-            color="#6d28d9"
-            metalness={0.22}
-            roughness={0.42}
-          />
-        </mesh>
-      ))}
-
-      {[-0.32, -0.02, 0.28].map((x) => (
-        <mesh key={x} position={[x, 0.18, -0.26]} castShadow receiveShadow>
-          <sphereGeometry args={[0.055, 16, 8]} />
-          <meshStandardMaterial
-            color="#bae6fd"
-            emissive="#38bdf8"
-            emissiveIntensity={0.4}
-            metalness={0.05}
-            roughness={0.22}
-          />
-        </mesh>
-      ))}
-
-      <mesh position={[-0.15, -0.06, -2]} castShadow receiveShadow>
-        <boxGeometry args={[0.18, 0.06, 0.22]} />
-        <meshStandardMaterial color="#22d3ee" emissive="#0891b2" emissiveIntensity={0.35} />
-      </mesh>
-
-      <mesh position={[-0.15, -0.06, 2]} castShadow receiveShadow>
-        <boxGeometry args={[0.18, 0.06, 0.22]} />
-        <meshStandardMaterial color="#f0abfc" emissive="#c026d3" emissiveIntensity={0.35} />
-      </mesh>
-    </group>
   )
 }
 

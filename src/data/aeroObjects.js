@@ -30,11 +30,11 @@ export const aeroObjects = [
   {
     id: 'wing',
     label: 'Perfil de Asa',
-    tag: 'Aviao 3D',
+    tag: 'Boeing 787-9',
     color: '#8b5cf6',
-    definitionTitle: 'Sustentacao em um aviao',
+    definitionTitle: 'Sustenta\u00e7\u00e3o em um avi\u00e3o',
     definition:
-      'O aviao mostra como asas podem direcionar o escoamento do ar e gerar sustentacao. O formato das asas ajuda a explicar por que uma aeronave consegue se manter no ar.',
+      'As asas do Boeing 787-9 desviam o ar e geram sustenta\u00e7\u00e3o para cima. O formato, o \u00e2ngulo de ataque e a velocidade do escoamento influenciam essa for\u00e7a.',
     metrics: {
       drag: 'Baixo',
       lift: 'Alta',
@@ -44,11 +44,11 @@ export const aeroObjects = [
   {
     id: 'car',
     label: 'Carro',
-    tag: 'Aerodin\u00e2mica aplicada',
+    tag: 'Esportivo 3D',
     color: '#d946ef',
     definitionTitle: 'Arrasto em ve\u00edculos',
     definition:
-      'No carro, para-brisa, teto e traseira alteram a separa\u00e7\u00e3o do fluxo. Linhas mais suaves reduzem consumo de energia e melhoram estabilidade.',
+      'Neste esportivo, cap\u00f4, para-brisa, teto e traseira mudam o caminho do ar. Reduzir o arrasto ajuda na velocidade e no consumo. Na F\u00f3rmula 1, asas e assoalho tamb\u00e9m geram for\u00e7a para baixo para aumentar a ader\u00eancia nas curvas.',
     metrics: {
       drag: 'M\u00e9dio',
       lift: 'Controlada',
